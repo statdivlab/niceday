@@ -5,56 +5,71 @@
 
 <!-- badges: start -->
 
+[![R-CMD-check](https://github.com/statdivlab/niceday/workflows/R-CMD-check/badge.svg)](https://github.com/statdivlab/niceday/actions)
 <!-- badges: end -->
 
-`niceday` is an `R` package for estimating fold-differences in
-multivariate outcomes across binary treatments and in the presence of
-other covariates. It uses a nonparametric approach, which means that
-under a given set of identifiability assumptions, no assumptions about
-the distribution of outcomes or the relationship between covariates and
-outcomes need to be made.
+`niceday` is an `R` package for non-parametrically estimating
+fold-differences in multivariate outcomes. `niceday` specifically
+estimates log-fold differences in covariate-weighted conditional means
+of an outcome *even when the desired outcome may not be directly
+observed*. Instead, the observed outcome reflects the desired outcome
+but with category- and sample-specific multiplicative distortions. One
+of the key advantages of niceday is that no assumptions about the
+distribution of outcomes or the structural relationship between the
+outcome and adjustment covariates (e.g., linearity) need to be made.
+
+We expect `niceday` to be especially useful for **microbiome
+researchers**, because
+
+1.  High-throughput sequencing of microbiomes displays variation in
+    sequencing depth, and [unequal detection of
+    taxa](https://elifesciences.org/articles/46923) (e.g., due to
+    extraction bias, amongst other things). Therefore, `niceday` allows
+    estimation of fold-differences on the true abundance scale, but just
+    the observed sequencing scale.
+2.  Researchers often want to adjust for additional covariates (either
+    known confounders or simply to make more reasonable comparisons
+    between groups), but don’t know what form the adjustment should take
+    – e.g., linear vs nonlinear, etc.
+
+We welcome your feedback and questions, and hope you find this package
+useful!
 
 ## Installation
 
-To install and load `niceday`, use the following code.
+To install and load `niceday`, use the following code. You may get some
+messages about the loaded packages, but these aren’t a problem.
 
 ``` r
 # install.packages("remotes")
-remotes::install_github("statdivlab/niceday")
+# remotes::install_github("statdivlab/niceday")
 library(niceday)
 ```
 
 ## Use
 
-Consider a dataset with `20` samples split into a treatment and control
-group and `30` outcomes. `W` is the multivariate outcome matrix, `A` is
-the treatment vector, and `X` is the matrix of covariates that we would
-like to adjust for.
+Here’s an example of how to run `niceday`’s main fitting function,
+`ndFit`. Check out the vignettes for more information! Here, we have an
+observed data matrix `W`, metadata `data`, contrast of interest `A`, and
+adjustment covariates `X`.
 
 ``` r
 library(niceday)
-
-W <- data.frame(matrix(rpois(20 * 30, 100), nrow = 20, ncol = 30))
-A <- rep(0:1, each = 10)
-X <- data.frame(rnorm(20, 0, 1), sample(c(1:3), size = 20, replace = TRUE))
-
-# fit niceday model
-niceday_res <- ndFit(W = W, A = A, X = X)
-#> Loading required package: SuperLearner
-#> Loading required package: nnls
-#> Loading required package: gam
-#> Loading required package: splines
-#> Loading required package: foreach
-#> Loaded gam 1.22-5
-#> Super Learner
-#> Version: 2.0-29
-#> Package created on 2024-02-06
-#> Loading required package: xgboost
-# look at estimates across categories
-plot(niceday_res$adjust$ABCD_g$taxon, niceday_res$adjust$ABCD_g$est)
+data(EcoZUR_meta)
+data(EcoZUR_count)
+my_ndfit <- ndFit(W = EcoZUR_count[, 1:50], # consider only the first 50 taxa to run quickly
+      data = EcoZUR_meta,
+      A = ~ Diarrhea,
+      X = ~ sex + age_months,
+      num_crossval_folds = 2, # use more folds in practice
+      num_crossfit_folds = 2, # for cross validation and cross fitting
+      sl.lib.pi = c("SL.mean"), # choosing single learner for the example to run quickly,
+      sl.lib.m = c("SL.mean"))  # in practice would use other options as well
 ```
 
-<img src="man/figures/README-example-1.png" width="100%" />
+If you want to go deep down the rabbit hole, you can look at how we ran
+it for the data analysis in our paper
+[here](https://github.com/statdivlab/niceday_supplementary/tree/main/data_application/R_scripts).
 
 ## Citation
 
@@ -62,7 +77,7 @@ If you use `niceday` for your analysis, please cite our manuscript.
 
 Grant Hopkins, Sarah Teichman, Ellen Graham, and Amy Willis.
 “Nonparametric Identification and Estimation of Ratios of Multi-Category
-Means under Preferential Sampling.”
+Means under Preferential Sampling.” <https://arxiv.org/abs/2510.23920>
 
 ## Bug reports and feature requests
 
