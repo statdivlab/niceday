@@ -39,9 +39,9 @@ This vignette provides an introduction to `niceday`, a statistical package that 
 
 - "nonparametric": we identify the parameters that we target without imposing parametric assumptions on the data distribution or the relationship between the outcome and covariates
 - "ratios of multi-category means": this refers to the parameter that we target. Specifically, we estimate ratios of means (also referred to as fold-differences), i.e. the multiplicative differences in means of the same category across levels of a binary treatment
-- "preferential sampling": we assume that observed data are proportional to absolute data that we wish we could observe, with potential unknown sample-specific and category-specific scaling factors 
+- "preferential sampling": we assume that observed data are proportional to "absolute-scale" data that we wish we could observe, with potential unknown sample-specific and category-specific scaling factors 
 
-In `niceday`, we identify our parameters with assumptions about our observed data and parameters. We assume the following:
+In `niceday`, we identify our parameters using assumptions about our observed data and parameters. We assume the following:
 
 1. Our expected observed level of category $j$ in sample $i$ is proportional to the true level of category $j$ in sample $i$, an unknown category-specific effect, and an unknown sample-specific effect. This is trivially fulfilled if there are no category- and/or sample-specific effects. 
 
@@ -86,19 +86,19 @@ ndRes <- ndFit(W = EcoZUR_count,
                X = ~ sex + age_months,
                num_crossval_folds = 2, # use more folds in practice
                num_crossfit_folds = 2, # for cross validation and cross fitting
-               sl.lib.pi = c("SL.mean"), # choosing single learner for the example to run quickly,
-               sl.lib.m = c("SL.mean"), # in practice would use other options as well
+               sl.lib.pi = c("SL.mean", "SL.glm.binom"), # choosing single learner for the example to run quickly,
+               sl.lib.m = c("SL.mean", "SL.glm.pois", "SL.gam.pois"), # in practice would use other options as well
                verbose = TRUE)  
 ```
 
 Let's look closer at some of the arguments for `ndFit()`. 
 
-- `W`: this is our count table, with observations on the rows and categories on the columns
-- `data`: this is our metadata (which includes all covariates in `A` and `X` formulas)
+- `W`: this is our observed data table, with observations on the rows and categories on the columns. Here's its the number of times the ASV was observed in each sample. 
+- `data`: this is our metadata as a data frame (which includes all covariates in `A` and `X` formulas)
 - `A`: this is the binary covariate that we would like to estimate fold-differences across (given as a `formula`)
 - `X`: these are the covariates that we would like to adjust for in our model
 - `num_crossval_folds` and `num_crossfit_folds`: the numbers of folds used for cross-validation and cross-fitting. We recommend using the defaults of `10` for each of these, we just use `2` in this example to run more quickly.
-- `sl.lib.pi` and `sl.lib.m`: the types of statistical learners that we use for our nuisance parameters (these are additional parameters that we must estimate in order to estimate our target parameters). In this example we only use the simplest learner "SL.mean", but in practice we recommend a wider set of learners to account for more complex relationships between the outcome and covariates 
+- `sl.lib.pi` and `sl.lib.m`: the types of statistical learners that we use for our nuisance parameters (these are additional parameters that we must estimate in order to estimate our target parameters). In this example we only use the simplest learner "SL.mean", but in practice we recommend a wider set of learners to account for more complex relationships between the outcome and covariates. For our analysis, we used `sl.lib.pi = c("SL.mean", "SL.glm.binom", "SL.glmnet.binom", "SL.gam.binom", "SL.ranger.binom", "SL.xgboost.binom", "SL.hal9001.binom")` and `sl.lib.m = c("SL.mean", "SL.glm.pois", "SL.glmnet.pois", "SL.gam.pois", "SL.ranger.pois", "SL.xgboost.pois")`. It takes longer, but gives us the performance guarantees that we'd like. 
 
 There are more optional arguments for `ndFit()` that we won't cover here. Feel free to post an issue if you have questions about them! 
 
@@ -119,7 +119,16 @@ ndRes$coef$Psi2g %>% head()
 (ndRes$coef$Psi2$est - ndRes$coef$Psi2g$est) %>% head()
 ```
 
-Here we can see that the set of parameters `Psi2` and `Psi2g` are the same up to a linear shift - this is the effect of making a different independence assumption and targeting a different parameter. 
+Here we can see that the set of parameters `Psi2` and `Psi2g` are the same up to a linear shift - this is the effect of centering all values by the same factor. 
+
+How can we interpret these results? To get the effect size on the fold scale (rather than the log-fold scale), exponentiate the estimate, and take the inverse ($1/\hat{\Psi_j}$) to flip the group comparison. Here's an example:
+
+- `Psi2` = `r signif(ndRes$coef$Psi2$est[1], 2)`: We estimate that the average abundance of ASV 1 is `r signif({psihat <- ndRes$coef$Psi2$est[1]; ifelse(psihat >0, exp(psihat), 1/exp(psihat))}, 3)` times greater in `r {psihat <- ndRes$coef$Psi2$est[1]; ifelse(psihat >0, "Diarrheal", "Non-Diarrheal")}` cohort.
+- `Psi2` = `r signif(ndRes$coef$Psi2$est[2], 2)`: We estimate that the average abundance of ASV 2 is `r signif({psihat <- ndRes$coef$Psi2$est[2]; ifelse(psihat >0, exp(psihat), 1/exp(psihat))}, 3)` times greater in `r {psihat <- ndRes$coef$Psi2$est[2]; ifelse(psihat >0, "Diarrheal", "Non-Diarrheal")}` cohort.
+- `Psi2g` = `r signif(ndRes$coef$Psi2g$est[1], 2)`: We estimate that the average abundance of ASV 1 is `r signif({psihat <- ndRes$coef$Psi2g$est[1]; ifelse(psihat >0, exp(psihat), 1/exp(psihat))}, 3)` times greater in `r {psihat <- ndRes$coef$Psi2g$est[1]; ifelse(psihat >0, "Diarrheal", "Non-Diarrheal")}` cohort, compared to typical fold-differences across groups.
+- `Psi2g` = `r signif(ndRes$coef$Psi2g$est[2], 2)`: We estimate that the average abundance of ASV 2 is `r signif({psihat <- ndRes$coef$Psi2g$est[2]; ifelse(psihat >0, exp(psihat), 1/exp(psihat))}, 3)` times greater in `r {psihat <- ndRes$coef$Psi2g$est[2]; ifelse(psihat >0, "Diarrheal", "Non-Diarrheal")}` cohort, compared to typical fold-differences across groups.
+
+You should state which assumptions you're using in the methods section of your work! Remember -- to use `Psi2`, you need to make a stronger assumption (independence of sampling effects and contrast of interest). 
 
 Finally, let's plot our estimates and 95% confidence intervals. We will move forward with our weaker assumption 5, with the parameter `Psi2g`. 
 
@@ -143,4 +152,4 @@ Here we can see that our 95% confidence intervals range from approximately $-4.5
 
 If you use `niceday` please cite the paper:
 
-Hopkins et al. "Nonparametric Identification and Estimation of Ratios of Multi-Category Means under Preferential Sampling." (2025+)
+Hopkins et al. (2025+) "Nonparametric Identification and Estimation of Ratios of Multi-Category Means under Preferential Sampling." https://arxiv.org/abs/2510.23920 
